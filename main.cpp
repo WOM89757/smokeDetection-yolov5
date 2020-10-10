@@ -6,6 +6,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/opencv.hpp>
 
+#include<algorithm>
 
 void TorchTest(){
     torch::jit::script::Module module = torch::jit::load("../model.pt");
@@ -84,12 +85,12 @@ int main(int argc, const char* argv[]) {
         return -1; 
     }
 
-    cv::VideoCapture cap;
-    cap.open(0);
+    // cv::VideoCapture cap;
+    // cap.open(0);
     cv::Mat frame;
-    if (!cap.read(frame)) {
-        throw std::logic_error("Failed to get frame from cv::VideoCapture");
-    }
+    // if (!cap.read(frame)) {
+    //     throw std::logic_error("Failed to get frame from cv::VideoCapture");
+    // }
     // cv::namedWindow("Smoke Detect", cv::WINDOW_AUTOSIZE);
 
     // Deserialize the ScriptModule from a file using torch::jit::load().
@@ -101,9 +102,9 @@ int main(int argc, const char* argv[]) {
     cv::Mat input;
     int delay = 33;
     
-    while(cap.read(frame)){
+    // while(cap.read(frame)){
 
-        // frame = cv::imread("../000-0.jpg"); 
+        frame = cv::imread("../000-0.jpg"); 
         // image.copyTo(frame) ;
 
         // imshow("srcImage", srcImage);
@@ -162,23 +163,55 @@ int main(int argc, const char* argv[]) {
                 // std::cout << c4 << std::endl;
                 // std::cout << c4[0].item().toFloat() <<","<<c4[1].item().toFloat()<< std::endl;
 
+  
+                double  gain = std::min(image.rows / (frame.rows/1.0000), image.cols / (frame.cols/1.0000) );
+                double  pad0 = (image.cols - frame.cols * gain) / 2;
+                double  pad1 = (image.rows - frame.rows * gain) / 2;
+
+                std::cout << "gain:"<< gain << std::endl;
+                std::cout << "pad0:"<< pad0 << std::endl;
+                std::cout << "pad1:"<< pad1 << std::endl;
+
                 torch::Tensor conv_res = torch::full_like(conf_res[0],1);
                 for (size_t i = 0; i < c4.numel(); i++)
                 {
 
                     conv_res[i][5] = c4[i].item().toFloat() * c5[i].item().toFloat();
                     conv_res[i][4] = c4[i].item().toFloat();
+                    //convert cxcywh->xyxy
                     conv_res[i][0] = cat_1[i][0] - cat_1[i][2] / 2;
                     conv_res[i][1] = cat_1[i][1] - cat_1[i][3] / 2;
                     // conv_res[i][2] = cat_1[i][0] + cat_1[i][2] / 2;
                     // conv_res[i][3] = cat_1[i][1] + cat_1[i][3] / 2;
                     conv_res[i][2] = cat_1[i][2] ;
                     conv_res[i][3] = cat_1[i][3] ;
+                    // //convert img1->img0
+                    // conv_res[i][0] = (conv_res[i][0] - pad0) / gain;
+                    // conv_res[i][2] = (conv_res[i][2] - pad0) / gain;
+                    // conv_res[i][1] = (conv_res[i][1] - pad1) / gain;
+                    // conv_res[i][3] = (conv_res[i][3] - pad1) / gain;
+                    // //convert xyxy->xywh
+                    // conv_res[i][2] = conv_res[i][2] - conv_res[i][0] / 2;
+                    // conv_res[i][3] = conv_res[i][3] - conv_res[i][1] / 2;
+
                     conv_res[i][5] = 0;
 
                 }
-                
+                // std::cout << conv_res << std::endl;
+                // for (size_t i = 0; i < c4.numel(); i++)
+                // {
+                // //   convert img1->img0
+                //     conv_res[i][0] = (conv_res[i][0] - pad0) / gain;
+                //     conv_res[i][2] = (conv_res[i][2] - pad0) / gain;
+                //     conv_res[i][1] = (conv_res[i][1] - pad1) / gain;
+                //     conv_res[i][3] = (conv_res[i][3] - pad1) / gain;
+                //     //convert xyxy->xywh
+                //     // conv_res[i][2] = conv_res[i][2] - conv_res[i][0] / 2;
+                //     // conv_res[i][3] = conv_res[i][3] - conv_res[i][1] / 2;
+                // }
+                  
                 std::cout << conv_res << std::endl;
+                
 
 
 
@@ -210,7 +243,6 @@ int main(int argc, const char* argv[]) {
 
                 if(conf_res.numel() > 0 ){
 
-                    std::list<BboxAndDescr> boxesAndDescrs;
                     std::vector<cv::Rect> boxs;
                     
                     for (size_t i = 0; i < c4.numel(); i++)
@@ -221,7 +253,8 @@ int main(int argc, const char* argv[]) {
                     std::cout<<" size : "<< boxs.size()<<std::endl;
                     for (size_t i = 0; i < boxs.size(); i++)
                     {
-                          cv::rectangle(image,  boxs[i], cv::Scalar(0, 0,250), 2);
+                        cv::rectangle(frame,  boxs[i], cv::Scalar(0, 0,250), 2);
+                        cv::rectangle(image,  boxs[i], cv::Scalar(0, 0,250), 2);
 
                     }
 
@@ -244,15 +277,15 @@ int main(int argc, const char* argv[]) {
         // cv::resizeWindow("Smoke Detect", 640, 640);
         imshow("Smoke Detect",image);    //显示摄像头的数据
 
-        cv::waitKey(30);
-        // cv::waitKey(0) ;
-        int key = cv::waitKey(delay) & 255;
-        if (key == 'p') {
-            delay = (delay == 0) ? 33 : 0;
-        } else if (key == 27) {
-            break;
-        }
-    }
+        cv::waitKey(0);
+        // cv::waitKey(30) ;
+        // int key = cv::waitKey(delay) & 255;
+        // if (key == 'p') {
+        //     delay = (delay == 0) ? 33 : 0;
+        // } else if (key == 27) {
+        //     break;
+        // }
+    // }
 
     
     // frame = cv::imread("../000-0.jpg");
